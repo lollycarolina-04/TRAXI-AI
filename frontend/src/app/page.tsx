@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -30,8 +29,13 @@ export default function Home() {
   // LOADING
   const [isPredicting, setIsPredicting] = useState(false);
 
-  // ROUTE DISTANCE
+  // ROUTE INFORMATION
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
+  const [routeTravelTime, setRouteTravelTime] = useState<number | null>(null);
+  const [routeTrafficDelay, setRouteTrafficDelay] = useState<number | null>(
+    null
+  );
+
   const [distanceLoading, setDistanceLoading] = useState(false);
   const [distanceError, setDistanceError] = useState("");
 
@@ -63,18 +67,20 @@ export default function Home() {
   }, []);
 
   // ==========================================
-  // GET ROUTE DISTANCE FROM TOMTOM
+  // GET ROUTE INFORMATION FROM TOMTOM
   // ==========================================
   useEffect(() => {
     if (!selectedRoute) {
       setRouteDistance(null);
+      setRouteTravelTime(null);
+      setRouteTrafficDelay(null);
       setDistanceError("");
       return;
     }
 
     let cancelled = false;
 
-    async function getRouteDistance() {
+    async function getRouteInformation() {
       const apiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
 
       if (!apiKey) {
@@ -84,7 +90,10 @@ export default function Home() {
 
       setDistanceLoading(true);
       setDistanceError("");
+
       setRouteDistance(null);
+      setRouteTravelTime(null);
+      setRouteTrafficDelay(null);
 
       try {
         const {
@@ -97,26 +106,50 @@ export default function Home() {
         const url =
           `https://api.tomtom.com/routing/1/calculateRoute/` +
           `${originLat},${originLon}:${destinationLat},${destinationLon}/json` +
-          `?key=${apiKey}&travelMode=car`;
+          `?key=${apiKey}&travelMode=car&traffic=true&computeTravelTimeFor=all`;
 
         const response = await fetch(url);
         const result = await response.json();
 
         if (!response.ok || !result.routes?.length) {
-          throw new Error("Unable to calculate route distance.");
+          throw new Error("Unable to calculate route information.");
         }
 
         if (cancelled) return;
 
-        const distanceInMeters =
-          result.routes[0].summary.lengthInMeters;
+        const summary = result.routes[0].summary;
 
-        setRouteDistance(distanceInMeters / 1000);
+        // ROUTE DISTANCE
+        setRouteDistance(summary.lengthInMeters / 1000);
+
+        // ESTIMATED TRAVEL TIME
+        setRouteTravelTime(
+          typeof summary.travelTimeInSeconds === "number"
+            ? summary.travelTimeInSeconds
+            : null
+        );
+
+        // TRAFFIC DELAY
+        const delay =
+          typeof summary.trafficDelayInSeconds === "number"
+            ? summary.trafficDelayInSeconds
+            : typeof summary.noTrafficTravelTimeInSeconds === "number" &&
+                typeof summary.travelTimeInSeconds === "number"
+              ? summary.travelTimeInSeconds -
+                summary.noTrafficTravelTimeInSeconds
+              : null;
+
+        setRouteTrafficDelay(delay !== null ? Math.max(0, delay) : null);
       } catch (error) {
         if (cancelled) return;
 
-        console.error("Failed to get route distance:", error);
-        setDistanceError("Route distance is unavailable.");
+        console.error("Failed to get route information:", error);
+
+        setDistanceError("Route information is unavailable.");
+
+        setRouteDistance(null);
+        setRouteTravelTime(null);
+        setRouteTrafficDelay(null);
       } finally {
         if (!cancelled) {
           setDistanceLoading(false);
@@ -124,7 +157,7 @@ export default function Home() {
       }
     }
 
-    getRouteDistance();
+    getRouteInformation();
 
     return () => {
       cancelled = true;
@@ -160,9 +193,7 @@ export default function Home() {
       const routeResult = await routeResponse.json();
 
       if (!routeResponse.ok || !routeResult.success) {
-        throw new Error(
-          routeResult.message || "Failed to send route"
-        );
+        throw new Error(routeResult.message || "Failed to send route");
       }
 
       // STEP 2: DETERMINE WEATHER CONDITION
@@ -192,9 +223,7 @@ export default function Home() {
       const predictionResult = await predictionResponse.json();
 
       if (!predictionResponse.ok || !predictionResult.success) {
-        throw new Error(
-          predictionResult.message || "Prediction failed"
-        );
+        throw new Error(predictionResult.message || "Prediction failed");
       }
 
       // STEP 4: DISPLAY PREDICTION
@@ -215,7 +244,6 @@ export default function Home() {
   // ==========================================
   return (
     <main className="min-h-screen bg-[#F5FAFA] text-slate-800">
-
       {/* SIDEBAR */}
       <aside className="fixed left-0 top-0 z-20 hidden h-screen w-60 flex-col border-r border-teal-100 bg-white px-5 py-8 lg:flex">
         <a href="#" className="mb-12 block px-3">
@@ -252,9 +280,7 @@ export default function Home() {
         </nav>
 
         <div className="mt-auto rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-100 p-4">
-          <p className="font-semibold text-teal-900">
-            Travel smarter!
-          </p>
+          <p className="font-semibold text-teal-900">Travel smarter!</p>
 
           <p className="mt-2 text-xs leading-relaxed text-slate-600">
             Check traffic conditions before you start your journey.
@@ -264,7 +290,6 @@ export default function Home() {
 
       {/* MAIN CONTENT */}
       <div className="lg:ml-60">
-
         {/* HERO HEADER */}
         <header
           id="home"
@@ -296,7 +321,6 @@ export default function Home() {
 
         {/* DASHBOARD */}
         <section className="space-y-6 px-5 py-7 md:px-8">
-
           {/* ROUTE PLANNER */}
           <div>
             <div className="mb-5 flex items-center gap-3">
@@ -318,16 +342,12 @@ export default function Home() {
 
           {/* TRAFFIC ANALYSIS + MAP */}
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
-
             {/* TRAFFIC ANALYSIS */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
               <div className="mb-5 flex items-center gap-3">
                 <span className="text-2xl text-teal-600">▥</span>
 
-                <h2 className="text-lg font-bold">
-                  Traffic Analysis
-                </h2>
+                <h2 className="text-lg font-bold">Traffic Analysis</h2>
               </div>
 
               {/* SELECTED ROUTE */}
@@ -343,9 +363,7 @@ export default function Home() {
                 {selectedRoute ? (
                   <div className="mt-3 space-y-2">
                     <div>
-                      <p className="text-xs text-slate-500">
-                        Starting Point
-                      </p>
+                      <p className="text-xs text-slate-500">Starting Point</p>
 
                       <p className="text-sm font-semibold text-slate-800">
                         {selectedRoute.origin}
@@ -353,9 +371,7 @@ export default function Home() {
                     </div>
 
                     <div className="border-t border-teal-100 pt-2">
-                      <p className="text-xs text-slate-500">
-                        Destination
-                      </p>
+                      <p className="text-xs text-slate-500">Destination</p>
 
                       <p className="text-sm font-semibold text-slate-800">
                         {selectedRoute.destination}
@@ -389,29 +405,41 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* TRAFFIC METRICS */}
+              {/* ROUTE TRAFFIC METRICS */}
               <div className="mt-4 grid grid-cols-2 gap-3">
+                {/* ESTIMATED TRAVEL TIME */}
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <div className="mb-2 text-lg">🚗</div>
+                  <div className="mb-2 text-lg">🕒</div>
 
                   <p className="text-xs text-slate-500">
-                    Average Speed
+                    Estimated Travel Time
                   </p>
 
                   <p className="mt-1 text-lg font-bold text-slate-800">
-                    {kecepatan} km/h
+                    {distanceLoading
+                      ? "Calculating..."
+                      : routeTravelTime !== null
+                        ? routeTravelTime < 60
+                          ? "<1 min"
+                          : `${Math.round(routeTravelTime / 60)} min`
+                        : "--"}
                   </p>
                 </div>
 
+                {/* TRAFFIC DELAY */}
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <div className="mb-2 text-lg">🚙</div>
+                  <div className="mb-2 text-lg">🚦</div>
 
-                  <p className="text-xs text-slate-500">
-                    Vehicle Volume
-                  </p>
+                  <p className="text-xs text-slate-500">Traffic Delay</p>
 
                   <p className="mt-1 text-lg font-bold text-slate-800">
-                    {kendaraan} / hour
+                    {distanceLoading
+                      ? "Calculating..."
+                      : routeTrafficDelay !== null
+                        ? routeTrafficDelay < 60
+                          ? "No delay"
+                          : `+${Math.round(routeTrafficDelay / 60)} min`
+                        : "--"}
                   </p>
                 </div>
               </div>
@@ -449,15 +477,11 @@ export default function Home() {
                 </h3>
 
                 {cuacaError ? (
-                  <p className="text-sm text-red-600">
-                    {cuacaError}
-                  </p>
+                  <p className="text-sm text-red-600">{cuacaError}</p>
                 ) : cuaca ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        Temperature
-                      </p>
+                      <p className="text-xs text-slate-500">Temperature</p>
 
                       <p className="mt-1 text-lg font-bold">
                         {cuaca.temperature_2m} °C
@@ -465,9 +489,7 @@ export default function Home() {
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        Humidity
-                      </p>
+                      <p className="text-xs text-slate-500">Humidity</p>
 
                       <p className="mt-1 text-lg font-bold">
                         {cuaca.relative_humidity_2m}%
@@ -475,9 +497,7 @@ export default function Home() {
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        Rainfall
-                      </p>
+                      <p className="text-xs text-slate-500">Rainfall</p>
 
                       <p className="mt-1 text-lg font-bold">
                         {cuaca.precipitation} mm
@@ -485,9 +505,7 @@ export default function Home() {
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        Wind Speed
-                      </p>
+                      <p className="text-xs text-slate-500">Wind Speed</p>
 
                       <p className="mt-1 text-lg font-bold">
                         {cuaca.wind_speed_10m} km/h
@@ -596,7 +614,6 @@ export default function Home() {
           <footer className="pb-5 pt-2 text-center text-xs text-slate-400">
             © 2026 TRAXI · Smarter Route. Smoother Journey.
           </footer>
-
         </section>
       </div>
     </main>
