@@ -1,8 +1,9 @@
+
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5fafa;
+  --foreground: #183447;
 }
 
 @theme inline {
@@ -12,15 +13,69 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: #b8e9e2;
+  color: #134e4a;
+}
+
+/* Smooth dashboard transitions */
+a {
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+/* Map container */
+.map-container {
+  width: 100%;
+  min-height: 380px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5fafa;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #b7dcd7;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7bbdb4;
+}
+
+/* Mobile layout */
+@media (max-width: 640px) {
+  body {
+    font-size: 14px;
+  }
 }

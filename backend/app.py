@@ -1,20 +1,85 @@
 
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from pathlib import Path
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 app = Flask(__name__)
-# Membaca data latihan AI
-data = pd.read_csv("traffic.csv")
+# Membaca data dummy untuk latihan AI
+BASE_DIR = Path(__file__).resolve().parent
+data = pd.read_csv(BASE_DIR / "dummy_data_traxi.csv")
 
-# Menentukan input dan hasil yang dipelajari
-X = data[["kecepatan", "kendaraan"]]
-y = data["kondisi"]
 
-# Melatih model AI
-model = DecisionTreeClassifier(random_state=42)
+# Menentukan fitur input dan target prediksi
+fitur_numerik = [
+    "kecepatan_rata_rata_kmh",
+    "jumlah_kendaraan_per_jam",
+]
+
+fitur_kategori = ["cuaca"]
+fitur = fitur_numerik + fitur_kategori
+
+X = data[fitur].copy()
+y = data["kondisi_kemacetan"]
+
+# Membagi data: 80% latihan dan 20% pengujian
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y,
+)
+
+# Memproses angka dan kategori cuaca
+pemroses = ColumnTransformer(
+    transformers=[
+        ("angka", "passthrough", fitur_numerik),
+        ("cuaca", OneHotEncoder(handle_unknown="ignore"), fitur_kategori),
+    ]
+)
+
+# Menggabungkan pemrosesan data dan model AI
+model = Pipeline(
+    steps=[
+        ("pemroses", pemroses),
+        ("classifier", DecisionTreeClassifier(
+            random_state=42,
+            max_depth=8,
+            min_samples_leaf=5,
+        )),
+    ]
+)
+
+# Melatih dan mengevaluasi model
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+
+print("\n=== EVALUASI AI TRAXI ===")
+print(f"Total data: {len(data)}")
+print(f"Data latihan: {len(X_train)}")
+print(f"Data pengujian: {len(X_test)}")
+print(f"Accuracy: {accuracy_score(y_test, y_pred):.2%}")
+
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred, zero_division=0))
+
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+# Latih ulang dengan seluruh data untuk digunakan oleh API
 model.fit(X, y)
+
+print("\nAI TRAXI siap digunakan oleh API.")
+print(f"Kategori kemacetan: {sorted(y.unique())}")
+print("Fitur AI:", fitur)
+
 
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 
@@ -27,27 +92,49 @@ def health():
         "message": "Backend is running"
     })
 
+
 @app.post("/api/predict")
 def predict_traffic():
-    data = request.get_json(silent=True) or {}
+    input_data = request.get_json(silent=True) or {}
 
     try:
-        kecepatan = float(data["kecepatan"])
-        kendaraan = int(data["kendaraan"])
+        kecepatan = float(input_data["kecepatan"])
+        kendaraan = int(input_data["kendaraan"])
+        cuaca = str(input_data["cuaca"]).strip().lower()
+
+        cuaca_diizinkan = {
+            "cerah",
+            "berawan",
+            "hujan ringan",
+            "hujan deras",
+        }
 
         if not 0 <= kecepatan <= 200 or kendaraan < 0:
             raise ValueError
 
+        if cuaca not in cuaca_diizinkan:
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Cuaca harus cerah, berawan, "
+                    "hujan ringan, atau hujan deras"
+                ),
+            }), 400
+
     except (KeyError, TypeError, ValueError):
         return jsonify({
             "success": False,
-            "message": "Kecepatan harus 0–200 dan jumlah kendaraan tidak boleh negatif"
+            "message": (
+                "Kecepatan harus 0–200, jumlah kendaraan "
+                "tidak boleh negatif, dan data harus lengkap"
+            ),
         }), 400
 
-    input_ai = pd.DataFrame(
-        [[kecepatan, kendaraan]],
-        columns=["kecepatan", "kendaraan"]
-    )
+    input_ai = pd.DataFrame([{
+        "kecepatan_rata_rata_kmh": kecepatan,
+        "jumlah_kendaraan_per_jam": kendaraan,
+        "cuaca": cuaca,
+    }])
 
     hasil = model.predict(input_ai)[0]
 
@@ -55,9 +142,10 @@ def predict_traffic():
         "success": True,
         "input": {
             "kecepatan": kecepatan,
-            "kendaraan": kendaraan
+            "kendaraan": kendaraan,
+            "cuaca": cuaca,
         },
-        "prediksi": hasil
+        "prediksi": hasil,
     })
 
 @app.get("/api/test-connection")
