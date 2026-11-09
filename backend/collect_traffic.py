@@ -24,6 +24,11 @@ LOCATIONS = [
         "latitude": 1.0681798721393116,
         "longitude": 104.02307316689026,
     },
+        {
+        "name": "Pintu 1Batamindo",
+        "latitude": 1.0676101202959312,
+        "longitude": 104.02272524396386,
+    },
     {
         "name": "Bukit Daeng",
         "latitude": 1.0534946133067,
